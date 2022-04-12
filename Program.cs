@@ -33,30 +33,40 @@ var stopWatch = new Stopwatch();
 
 // Run all Strategies in parallel.
 stopWatch.Start();
-var allTasksAsSingleOne = Parallel.ForEach(
-    strategies,
-    async f =>
-    {
-        await f.IsMatch(new MemoryStream(messageToUse), channel.Writer, cancellationTokenSource.Token);
-    }
-);
 
-StrategyResult endResult = default;
+StrategyResult endResult = await AppRun(messageToUse, channel, cancellationTokenSource, strategies);
 
-// Processing time will take between quickest Strategy and slowest Strategy.
-for (var i = 0; i < strategies.Length || allTasksAsSingleOne.IsCompleted; i++)
-{
-    // read all process one by one
-    var result = await channel.Reader.ReadAsync();
-    if (result.IsOk)
-    {
-        // stop all remainings tasks
-        cancellationTokenSource.Cancel();
-        endResult = result;
-        break;
-    }
-}
 stopWatch.Stop();
 
 Console.WriteLine(endResult.ToString());
 Console.WriteLine($"elapsed time: {stopWatch.ElapsedMilliseconds}");
+
+
+static async Task<StrategyResult> AppRun(byte[] messageToUse, Channel<StrategyResult> channel, CancellationTokenSource cancellationTokenSource, IStrategy[] strategies)
+{
+    var allTasksAsSingleOne = Parallel.ForEach(
+        strategies,
+        async f =>
+        {
+            await f.IsMatch(new MemoryStream(messageToUse), channel.Writer, cancellationTokenSource.Token);
+        }
+    );
+
+    StrategyResult endResult = default;
+
+    // Processing time will take between quickest Strategy and slowest Strategy.
+    for (var i = 0; i < strategies.Length || allTasksAsSingleOne.IsCompleted; i++)
+    {
+        // read all process one by one
+        var result = await channel.Reader.ReadAsync();
+        if (result.IsOk)
+        {
+            // stop all remainings tasks
+            cancellationTokenSource.Cancel();
+            endResult = result;
+            break;
+        }
+    }
+
+    return endResult;
+}
