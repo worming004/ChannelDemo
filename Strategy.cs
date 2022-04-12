@@ -31,20 +31,20 @@ public interface IStrategy
     Task IsMatch(Stream str, ChannelWriter<StrategyResult> channel, CancellationToken token);
 }
 
-class Strategy : IStrategy
+class StrategyWrapper : IStrategy
 {
     private IStrategy _strategy;
 
     public string Name => _strategy.Name;
 
-    private Strategy(IStrategy strategy)
+    private StrategyWrapper(IStrategy strategy)
     {
         _strategy = strategy;
     }
 
     internal static IStrategy WrapWithTryCatch(IStrategy strategy)
     {
-        return new Strategy(strategy);
+        return new StrategyWrapper(strategy);
     }
 
     public async Task IsMatch(Stream str, ChannelWriter<StrategyResult> channel, CancellationToken token)

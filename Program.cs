@@ -25,7 +25,7 @@ var strategies = new IStrategy[] {
         new XmlTypeStrategyOneAndQuick(),
         new XmlTypeStrategySecondAndSlow()
     }
-    .Select(f => Strategy.WrapWithTryCatch(f))
+    .Select(f => StrategyWrapper.WrapWithTryCatch(f))
     .ToArray();
 
 // start stop watch AFTER Strategies array creation. All calls are independant, meaning that they can be registered as singleton 
