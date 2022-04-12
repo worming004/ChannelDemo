@@ -1,71 +1,71 @@
 
-#region Filters
 using System.Threading.Channels;
 using System.Xml;
 
-public struct FilterResult
+public struct StrategyResult
 {
     public bool IsOk { get; set; }
-    public string FilterName { get; set; }
+    public string StrategyName { get; set; }
     public bool OnException { get; set; }
 
     public override string ToString()
     {
-        return $"isOk: {IsOk}, FilterName: {FilterName}, OnException: {OnException}";
+        return $"isOk: {IsOk}, StrategyName: {StrategyName}, OnException: {OnException}";
     }
 
-    public static FilterResult CreateOnException(string filterName)
+    public static StrategyResult CreateOnException(string strategyName)
     {
-        return new FilterResult
+        return new StrategyResult
         {
             IsOk = false,
-            FilterName = filterName,
+            StrategyName = strategyName,
             OnException = true
         };
     }
 }
 
-public interface IFilter
+public interface IStrategy
 {
     string Name { get; }
     // Input is a stream, meaning we can also use them to discover if file is a json or something else
-    Task IsOk(Stream str, ChannelWriter<FilterResult> channel, CancellationToken token);
+    Task IsMatch(Stream str, ChannelWriter<StrategyResult> channel, CancellationToken token);
 }
 
-class Filter : IFilter
+class Strategy : IStrategy
 {
-    private IFilter _filter;
+    private IStrategy _strategy;
 
-    public string Name => _filter.Name;
+    public string Name => _strategy.Name;
 
-    private Filter(IFilter filter)
+    private Strategy(IStrategy strategy)
     {
-        _filter = filter;
-    }
-    internal static IFilter WrapWithTryCatch(IFilter filter)
-    {
-        return new Filter(filter);
+        _strategy = strategy;
     }
 
-    public async Task IsOk(Stream str, ChannelWriter<FilterResult> channel, CancellationToken token)
+    internal static IStrategy WrapWithTryCatch(IStrategy strategy)
+    {
+        return new Strategy(strategy);
+    }
+
+    public async Task IsMatch(Stream str, ChannelWriter<StrategyResult> channel, CancellationToken token)
     {
         try
         {
-            await _filter.IsOk(str, channel, token);
+            await _strategy.IsMatch(str, channel, token);
         }
         catch
         {
-            await channel.WriteAsync(FilterResult.CreateOnException(_filter.Name));
+            await channel.WriteAsync(StrategyResult.CreateOnException(_strategy.Name));
         }
     }
 }
 
 // it's ok result if content is a xml with Quick as name
-class XmlTypeFilterOneAndQuick : IFilter
+class XmlTypeStrategyOneAndQuick : IStrategy
 {
-    public string Name => nameof(XmlTypeFilterOneAndQuick);
+    public string Name => nameof(XmlTypeStrategyOneAndQuick);
 
-    public async Task IsOk(Stream str, ChannelWriter<FilterResult> channel, CancellationToken token)
+    public async Task IsMatch(Stream str, ChannelWriter<StrategyResult> channel, CancellationToken token)
     {
         using var xmlReader = XmlReader.Create(str, new XmlReaderSettings { Async = true });
 
@@ -81,7 +81,7 @@ class XmlTypeFilterOneAndQuick : IFilter
                     if (val == "Quick")
                     {
                         // xml is the one expected
-                        await channel.WriteAsync(new FilterResult { IsOk = true, FilterName = Name });
+                        await channel.WriteAsync(new StrategyResult { IsOk = true, StrategyName = Name });
                         // return immediatly after sending a result
                         return;
                     }
@@ -92,15 +92,15 @@ class XmlTypeFilterOneAndQuick : IFilter
         }
 
         // xml is not the type requested
-        await channel.WriteAsync(new FilterResult { IsOk = false, FilterName = Name });
+        await channel.WriteAsync(new StrategyResult { IsOk = false, StrategyName = Name });
     }
 }
 
 // it's ok result if content is a xml with Slow as name
-class XmlTypeFilterSecondAndSlow : IFilter
+class XmlTypeStrategySecondAndSlow : IStrategy
 {
-    public string Name => nameof(XmlTypeFilterSecondAndSlow);
-    public async Task IsOk(Stream str, ChannelWriter<FilterResult> channel, CancellationToken token)
+    public string Name => nameof(XmlTypeStrategySecondAndSlow);
+    public async Task IsMatch(Stream str, ChannelWriter<StrategyResult> channel, CancellationToken token)
     {
         using var xmlReader = XmlReader.Create(str, new XmlReaderSettings { Async = true });
 
@@ -109,7 +109,7 @@ class XmlTypeFilterSecondAndSlow : IFilter
         && await xmlReader.ReadAsync())
         {
             // make it slower
-            await Task.Delay(100);
+            await Task.Delay(10);
             // logic to discover if xml is expected one
             switch (xmlReader.NodeType)
             {
@@ -118,7 +118,7 @@ class XmlTypeFilterSecondAndSlow : IFilter
                     if (val == "Slow")
                     {
                         // xml is the one expected
-                        await channel.WriteAsync(new FilterResult { IsOk = true, FilterName = Name });
+                        await channel.WriteAsync(new StrategyResult { IsOk = true, StrategyName = Name });
                         // return immediatly after sending a result
                         return;
                     }
@@ -129,8 +129,6 @@ class XmlTypeFilterSecondAndSlow : IFilter
         }
 
         // xml is not the type requested
-        await channel.WriteAsync(new FilterResult { IsOk = false, FilterName = Name });
+        await channel.WriteAsync(new StrategyResult { IsOk = false, StrategyName = Name });
     }
 }
-
-#endregion
